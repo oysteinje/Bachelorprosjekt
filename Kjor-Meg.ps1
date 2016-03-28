@@ -1,1 +1,1 @@
-Import-Module .\BachelorProsjekt.psm1
+Import-Module .\BachelorProsjekt.psm1 -Force
