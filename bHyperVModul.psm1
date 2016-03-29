@@ -85,9 +85,25 @@ Function New-VMFromTemplate {
 }
 
 # Lister ut detaljert (relevant) informasjon for virtuelle maskiner 
-Get-VmDetaljert {
-    $VirtuelleMaskiner = Get-VM # | Format-Table -AutoSize -Property name, Path, CheckpointFileLocation,  Status, Uptime, Version, MemoryAssigned
-    $obj = new-object -TypeName psobject
-    $obj | Add-Member -MemberType NoteProperty -Name mb -Value $VirtuelleMaskiner.MemoryAssigned
-    $obj.mb
+Function Get-VmDetaljert {
+    # Legg alle virtuelle maskiner i variabel
+    $VMs = Get-VM
+
+    # Legg til property linjenummer 
+    $LinjeNummer = 0
+
+    # Gjennomgår hver rad i objekt 
+    $VMs | ForEach-Object {
+        # Legger til linjenummer som egenskap for hver rad 
+        Add-Member -InputObject $_ -MemberType NoteProperty `
+        -Name LinjeNummer -Value $LinjeNummer
+
+        # Inkrementerer linjenummer
+        $LinjeNummer++
+    }
+
+    
+    #$vms | where {$_.linjenummer -eq 2} | ft -prop linjenummer, name
+
+    $VMs | Format-Table -AutoSize -Property LinjeNummer, name, Status, @{Label='Memory(MB)';Expression={$_.memoryassigned/1MB}}, Version, Path, CheckpointFileLocation, Uptime
 }

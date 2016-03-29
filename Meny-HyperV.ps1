@@ -13,19 +13,30 @@ do {
     $exit = $false 
 
     # Legg alternativer i tabell
-    $alternativer = $("Søk", "Virtuelle Maskiner", "Migrasjon", "Clusters", "Nettverk", "Avslutt")
-
+    $alternativer = "Søk", "Virtuelle Maskiner", "Migrasjon", "Clusters", "Nettverk", "Avslutt"
+    
     # Gjør et valg 
     $valg = Velg-Alternativ $alternativer 
-
+     
     # Utfører valg 
-    switch($alternativer) {
+    switch($valg) {
         # 
         0 {}
         # 
         1 
         {
-            $alternativer = "Ta snapshot", "Ny blank VM", "Ny VM fra template", "Ny virtuell harddisk", "Slett VM"
+            $alternativer = "Administrer snapshots", "Ny blank VM", "Ny VM fra template", "Ny virtuell harddisk", "Slett VM", "Tilbake"
+            $valg = Velg-Alternativ $alternativer
+            switch ($valg) {
+                0 
+                {
+                    
+                }
+                1 {}
+                2 {}
+                3 {}
+                4 {}
+            }
         }
         #
         2 {}
