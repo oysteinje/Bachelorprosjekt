@@ -1,22 +1,29 @@
 # Skriv ut informasjon om programmet 
-$info = @"
+write $info = @"
+-----------------
 Server Hyper-V 
-Programmet lar deg konfigurere det meste som har med Hyper-V å gjøre.
-"@
+-----------------
+
+Kommando    Beskrivelse
+---------   -----------
+?           Hjelp
+"@ 
 
 # Importerer moduler
 .\Kjor-Meg.ps1
+
 
 do {
 
     # Holder løkka gående så lenge exit er lik false
     $exit = $false 
 
+    <#
     # Legg alternativer i tabell
-    $alternativer = "Søk", "Virtuelle Maskiner", "Migrasjon", "Clusters", "Nettverk", "Avslutt"
+    #$alternativer = "Søk", "Administrer Virtuelle Maskiner", "Opprett Virtuell Maskin", "Migrasjon", "Clusters", "Nettverk", "Avslutt"
     
     # Gjør et valg 
-    $valg = Velg-Alternativ $alternativer 
+    #$valg = Velg-Alternativ $alternativer 
      
     # Utfører valg 
     switch($valg) {
@@ -25,8 +32,16 @@ do {
         # 
         1 
         {
-            $alternativer = "Administrer snapshots", "Ny blank VM", "Ny VM fra template", "Ny virtuell harddisk", "Slett VM", "Tilbake"
+            # Velg hva som skal gjøres 
+            $alternativer = "Snapshots", "Endre Hardware", "Slett VM", "Tilbake"
+
+            # Utfør valg 
             $valg = Velg-Alternativ $alternativer
+
+            # Velg virtuelle maskiner som skal endres 
+            $VMs = Velg-Objekt (get-vm) name, Status, @{Label='Memory(MB)';Expression={$_.memoryassigned/1MB}}, Version, Path, CheckpointFileLocation, Uptime
+
+            # Utfør valg 
             switch ($valg) {
                 0 
                 {
@@ -48,8 +63,8 @@ do {
         5 {$exit = $true}
     }
 
-
+    
     if ($exit -eq $false) { Read-Host "Trykk enter for å fortsette"  }
-
+    #>
 }while ($exit -eq $false)
 
