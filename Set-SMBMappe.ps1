@@ -1,0 +1,1 @@
+New-PSDrive -Name Z -Root "\\158.38.56.145\delt_mappe\dsc" -Persist -PSProvider FileSystem -Credential administrator
