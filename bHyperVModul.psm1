@@ -20,30 +20,54 @@ Function New-VMFromTemplate {
 .EXAMPLE
 
 #>
-
-
     [CmdletBinding()]
     param(
         [Parameter(
             Position = 1,
-            Mandatory = $false
+            Mandatory = $true,
+            ValueFromPipeline=$True
         )][string[]]$VMName,
         
-        [Parameter( 
-            Mandatory = $true
-        )][string]$VhdPath,
+        [Parameter(Mandatory)]
+        [string]$VHDDestination,
         
-        [parameter(
-            Mandatory = $true
-        )][string]$TemplatePath,
+        [parameter(Mandatory)]
+        [string]$TemplatePath,
 
-        [parameter(
-            Mandatory = $false
-        )][string]$MemoryStartupBytes = "1GB"
+        [string]$MemoryStartupBytes = 1GB
     )
 
+
+    begin{}
+    process
+    {
+        foreach ($vm in $VMName)
+        {
+            # Sjekk at destinasjonen slutter med skråstrek (/), hvis ikke så legg det til 
+            if ( ([char[]]$VHDDestination | select -last 1) -notmatch "/" ) 
+            {
+                $VHDDestination += '/'
+            }
+
+            # Opprett virtuell harddisk 
+            New-VHD -Path ("$VHDDestination" + "$vm.vhdx") -ParentPath $TemplatePath -Verbose
+            
+            # Opprett virtuell maskin 
+            New-VM -Name $vm -MemoryStartupBytes $MemoryStartupBytes -VHDPath ("$VHDDestination" + "$vm.vhdx") -Verbose
+        }
+    }
+    end{}
+
+
+
+
+
+
+
+    <#
     Begin{
         # Hent inn eksisterende svitsjer
+        
         $svitsjer = Get-VMSwitch | select -ExpandProperty name
          
         # Sjekker at valgt(e) svitsj(er) eksisterer
@@ -64,25 +88,33 @@ Function New-VMFromTemplate {
                 {$err = $true}
             }
         }while ($err -eq $true)
-      
+     
     }
-
+    
     Process{
         foreach ($vm in $VMName) {
             # Opprett virtuell disk 
-            New-VHD -ParentPath $TemplatePath + "$vm.vhd" -Path $VhdPath 
+            New-VHD -ParentPath $TemplatePath -Path $VhdPath 
 
             # Opprett virtuell maskin 
-            New-VM -Name $vmName -VHDPath $vhdPath -MemoryStartupBytes $MemoryStartupBytes
+            New-VM -Name $vmName -VHDPath $vhdPath 
 
             # Legg til svitsjer 
-            foreach ($switch in $additionalSwitches) {
-                Add-VMNetworkAdapter -VMName $vmName -SwitchName $switch
-            }
+            #foreach ($switch in $additionalSwitches) {
+            #    Add-VMNetworkAdapter -VMName $vmName -SwitchName $switch
+            #}
         }
     }
     End{}
+    #>
 }
+
+
+
+
+
+
+
 
 # Lister ut detaljert (relevant) informasjon for virtuelle maskiner 
 Function Get-VmDetaljert {
