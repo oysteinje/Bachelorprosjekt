@@ -1,6 +1,7 @@
-$SmbDrive = "\\158.38.56.145\delt_mappe"
+#$SmbDrive = "\\158.38.56.145\delt_mappe"
 
-Import-Module .\BachelorProsjekt.psm1 -Force
-Import-Module .\bHyperVModul.psm1 -force 
+#Import-Module .\BachelorProsjekt.psm1 -Force
+#Import-Module .\bHyperVModul.psm1 -force 
+Import-Module .\ObjektModul.psm1 -force 
 
-.\Set-SMBMappe.ps1 -SMBDrive $SmbDrive
+#.\Set-SMBMappe.ps1 -SMBDrive $SmbDrive

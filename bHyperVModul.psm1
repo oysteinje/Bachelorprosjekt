@@ -38,7 +38,28 @@ Function New-VMFromTemplate {
     )
 
 
-    begin{}
+    begin{
+        
+        # Tester at stiene eksisterer 
+        do
+        {
+            
+            $error = $false
+
+            if (Test-Path $VHDDestination -eq $false) 
+            {
+                $VHDDestination = read-host "Stien for VHD stemmer ikke, skriv inn ny"
+                $error = $true
+            }
+            if (Test-Path $TemplatePath -eq $false) 
+            {
+                $TemplatePath = read-host "Stien for template stemmer ikke, skriv inn ny"
+                $error = $true
+            }
+        }
+        while ($error -eq $true)
+    }
+
     process
     {
         foreach ($vm in $VMName)
@@ -118,24 +139,12 @@ Function New-VMFromTemplate {
 
 # Lister ut detaljert (relevant) informasjon for virtuelle maskiner 
 Function Get-VmDetaljert {
-    # Legg alle virtuelle maskiner i variabel
-    $VMs = Get-VM
+    param(
+        [parameter(mandatory=$true)]
+        [ValidateNotNullOrEmpty]
+        $VMs
+    )
 
-    # Legg til property linjenummer 
-    $LinjeNummer = 0
-
-    # Gjennomgår hver rad i objekt 
-    $VMs | ForEach-Object {
-        # Legger til linjenummer som egenskap for hver rad 
-        Add-Member -InputObject $_ -MemberType NoteProperty `
-        -Name LinjeNummer -Value $LinjeNummer
-
-        # Inkrementerer linjenummer
-        $LinjeNummer++
-    }
-
-    
-    #$vms | where {$_.linjenummer -eq 2} | ft -prop linjenummer, name
-
-    $VMs | Format-Table -AutoSize -Property LinjeNummer, name, Status, @{Label='Memory(MB)';Expression={$_.memoryassigned/1MB}}, Version, Path, CheckpointFileLocation, Uptime
+    # Skriv ut virtuelle maskiner 
+    $VMs | Format-Table -AutoSize -Property name, Status, @{Label='Memory(MB)';Expression={$_.memoryassigned/1MB}}, Version, Path, CheckpointFileLocation, Uptime
 }
