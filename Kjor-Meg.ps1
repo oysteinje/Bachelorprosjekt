@@ -2,6 +2,6 @@
 
 #Import-Module .\BachelorProsjekt.psm1 -Force
 #Import-Module .\bHyperVModul.psm1 -force 
-Import-Module .\ObjektModul.psm1 -force 
+Import-Module .\ObjektModul.psm1 -force -WarningAction SilentlyContinue
 
 #.\Set-SMBMappe.ps1 -SMBDrive $SmbDrive
