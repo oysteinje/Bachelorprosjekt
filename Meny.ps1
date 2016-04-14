@@ -1,32 +1,33 @@
 # Navn for servere
 $global:NavnHyperV = 'Hyper-V Server'
 $global:NavnVRouter = 'Virtuell Router'
+$global:NavnADServer = 'Active Directory Server'
 
 # IP for servere 
 $global:IPHyperV = '158.38.56.146'
 $global:IPVRouter = '158.38.56.149'
+$global:IPADServer = '158.38.56.149'
 
 # IP og port for servere 
 $global:HyperV = @{NAVN=$NavnHyperV;IP=$IPHyperV;PORT='13389';PREFIX='hv'}
 $global:vRouter = @{NAVN=$NavnVRouter;IP=$IPVRouter;PORT='13389';PREFIX='vr'}
+$global:ADServer = @{NAVN=$NavnADServer;IP=$IPADServer;PORT='33895';PREFIX='vr'}
 
 # Prefix for servere
 $global:PrefixHyperV = 'hv'
 $global:PrefixVRouter = 'vr'
+$global:PrefixADServer = 'ad'
 
 # Initialiserer nødvendige moduler 
 .\Kjor-Meg.ps1
 
-# Henter sesjoner inn i variabel
-#$global:SesjonHyperV = Get-PSSession -name $NavnHyperV
-#$global:SesjonVRouter = Get-PSSession -name $NavnVRouter
-
 # Kobler til sesjonene 
-Connect-Sesjoner -Servere $HyperV, $vRouter -Credentials $cred
+Connect-Sesjoner -Servere $HyperV, $vRouter, $ADServer -Credentials $cred
 
 # Henter sesjoner inn i variabel
 $global:SesjonHyperV = Get-PSSession -name $NavnHyperV
 $global:SesjonVRouter = Get-PSSession -name $NavnVRouter
+$global:SesjonADServer = Get-PSSession -name $NavnADServer
 
 # Importerer Hyper-V modulen fra ekstern maskin hvis den ikke allerede eksisterer 
 if ((Get-Command "Get-VM" -ErrorAction SilentlyContinue) -eq $null) 
@@ -35,6 +36,14 @@ if ((Get-Command "Get-VM" -ErrorAction SilentlyContinue) -eq $null)
     Invoke-Command -Session $SesjonHyperV -ScriptBlock {Import-Module Hyper-V} -Verbose
     Import-PSSession -Session $SesjonHyperV -Module hyper-v -Verbose #-Prefix $PrefixHyperV
 }
+
+if ((Get-Command "Get-ADUser" -ErrorAction SilentlyContinue) -eq $null) 
+{
+    Write-Host "Laster inn moduler fra $NavnADServer server. Vennligst vent. . ." -ForegroundColor Cyan
+    Invoke-Command -Session $SesjonADServer -ScriptBlock {Import-Module activedirectory} -Verbose
+    Import-PSSession -Session $SesjonADServer -Module activedirectory -Verbose #-Prefix $PrefixHyperV
+}
+
 
 # Opprett alternativer som objekt 
 $reaksjon = Get-Meny
@@ -53,7 +62,7 @@ do
     $reaksjon = ($ValgtObjekt.Reaksjon()) #($ValgtObjekt | Select-Object -ExpandProperty reaksjon)
     #}
 
-    Clear-Host
+    #Clear-Host
 
 
 }while ($reaksjon -notmatch 'avslutt()')

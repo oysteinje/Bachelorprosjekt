@@ -5,23 +5,24 @@ Function Connect-Sesjoner
 {
     param
     (
-    [hashtable[]]$Servere,
-    $Credentials
+        [hashtable[]]$Servere,
+        $Credentials
     )
 
     foreach($server in $servere)
     {
         # Henter sesjonen 
-        $sesjon = Get-PSSession | where {$_.ComputerName -match $server.get_item('IP')}
-        
+        $sesjon = Get-PSSession | where {$_.Name -match $server.get_item('NAVN')}
+
         if($sesjon -eq $null)
-        {            
+        {   
             New-PSSession -ComputerName $server.get_item('IP') -port $server.get_item('PORT') -Name $server.get_item('NAVN') -Credential $Credentials -Verbose
         }else
         {            
              $sesjon | Connect-PSSession | Out-Null
         }
         
+        $sesjon = $null   
     }
 }
 
@@ -309,6 +310,7 @@ function New-Scope
     {
         [timespan]$LeaseDuration = '08:00:00'
     }
+echo "oopdas `" das "
 
     # Oppretter skope på DHCP server 
     $resultat = Invoke-Command -Session $SesjonVRouter `
@@ -431,6 +433,8 @@ Function Get-DHCPValg
     ([pscustomobject]@{'Nummer'=5; 'Alternativ'='Deaktiver scope'} | 
     Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Set-Scope} -PassThru)
 
+    Write-Host "Sjekker at DHCP er satt opp" -ForegroundColor Cyan
+
     $DhcpFeature = Invoke-Command -Session $SesjonVRouter `
                     -ScriptBlock {Get-WindowsFeature dhcp}
 
@@ -471,13 +475,290 @@ Function Get-ObjVirtuellRouter
     [pscustomobject]@{'Nummer'=1; 'Alternativ'='Virtuell Router'} | 
     Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-ObjKonfigurerDHCP} -PassThru
 }
-Function Get-Meny
+
+function Format-Brukernavn
+{
+    param([String]$String)
+
+    #sett brukernavn til små bokstaver
+    $brukernavn=$brukernavn.ToLower()
+    
+    #Erstatt æøå med eoa
+    $brukernavn=$brukernavn.replace('æ','e')
+    $brukernavn=$brukernavn.replace('ø','o')
+    $brukernavn=$brukernavn.replace('å','a')
+    
+    #Returnere det formatere brukernavnet    
+    return $brukernavn
+} 
+
+Function Set-Brukernavn
+{
+    param(
+        [string]$Fornavn,
+        [string]$Etternavn
+    )
+
+    # Setter midlertidig variabel til $null slik at den ikke inneholder noe fra tidligere 
+    $midlertidigBrukernavn = $null 
+    $sjekk = $true 
+    
+    # Hvis fornavn eller etternavn er på to bokstaver blir disse to brukt i brukernavnet istedet for tre bokstaver 
+    if($fornavn.length -eq 2)
+    {
+        $brukernavn = $fornavn.substring(0,2) 
+    }else
+    {
+        $brukernavn = $fornavn.substring(0,3)
+    }
+    
+
+    if($etternavn.length -eq 2)
+    {
+        $brukernavn += $etternavn.substring(0,2) 
+    }else
+    {
+        $brukernavn += $etternavn.substring(0,3)
+    }
+
+    # Telleren bli satt til en. Den skal brukes hvis brukernavnet allerede er i bruk
+    $teller = 1
+
+    # Bruker Format-Brukernavn
+    $navn = Format-Brukernavn $brukernavn
+    $MidlertidigBrukernavn = $navn
+
+    do{
+        # Sjekk om brukernavnet er i bruk. Hvis brukernavn ikke finnes er resultatet
+        $null
+        $finnes = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Get-ADUser -Filter {SamAccountName -eq $MidlertidigBrukernavn}
+        }
+        
+        # Hvis brukernavnet ikker er i bruk 
+        if($finnes -eq $null){
+            $sjekk = $false
+            $navn = $MidlertidigBrukernavn
+        }else{
+            # Hvis det er to like brukernavn vil teller bli lagt til slutten av
+            # brukernavnet for å skille de.
+            $MidlertidigBrukernavn = $navn + $teller 
+            
+            #inkrementerer teller slik at en får et annet brukernavn neste gang.
+            $teller +=1
+        }
+    }while($sjekk -eq $true)
+
+    return $navn
+} 
+
+
+Function New-ADBruker
+{   
+   
+    # Skriv inn fornavn 
+    $fornavn = Read-Host "Skrv inn brukerens fornavn" 
+        
+    # Skriv inn etternavn 
+    $etternavn = Read-Host "Skriv inn brukerens etternavn" 
+
+    # Sjekk at fornavn og etternavn ikke er for kort 
+    do
+    {
+        $err = $false
+        if($Fornavn.Length -lt 2)
+        {
+            $Fornavn = Read-Host `
+             -prompt 'Fornavnet må minst være på to bokstaver. Skriv inn fornavn på nytt'
+             $err = $true
+        }
+
+        if($Etternavn.Length -lt 2)
+        {
+            $Etternavn = Read-Host `
+            -Prompt 'Etternavnet må være på minst to bokstaver. Skriv inn etternavn på nytt'
+            $err = $true
+        }
+    }while($err -eq $true)
+   
+    # Opprett fullt ut fra fornavn og etternavn 
+    $fulltNavn = "$fornavn $etternavn"  
+
+    # Skriv inn e-post 
+    $epost = Read-Host "Skriv inn brukerens e-post" 
+        
+    # Sett et unit brukernavn 
+    [String]$brukernavn = Set-Brukernavn $fornavn $etternavn
+        
+    # Ta bort mellomrom ol. 
+    $brukernavn = $brukernavn.Trim() 
+
+    # Les inn og konverter passordet over til sikker tekst 
+    $passord = Read-Host "Skriv inn brukerens passord:" -AsSecureString
+    $passord = ConvertTo-SecureString $passord -AsPlainText -Force 
+        
+    # Forsøk å opprett AD bruker 
+    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        try
+        {
+        
+            New-ADUser  -SamAccountName $using:brukernavn `
+                        -UserPrincipalName $using:brukernavn `
+                        -Name $using:fulltNavn `
+                        -Surname $using:etternavn `
+                        -AccountPassword $using:passord `
+                        -ChangePasswordAtLogon $true `
+                        -EmailAddress $using:epost `
+                        -Enabled $true
+
+            Write-Host "Brukeren $brukernavn er opprettet" -ForegroundColor Green
+            sleep -Seconds 2 
+        }catch{
+            Write-Host $_.Exception.Message -ForegroundColor red
+        }
+    }
+    
+    # Sendes tilbake til meny 
+    return Get-ObjOpprettBrukere
+}
+# Scriptet oppretter brukere fra CSV fil 
+#
+# Fungerer følgende: 
+# Hent inn CSV fil, hent ut informasjon fra CSV fil, opprett og valider brukernavn, opprett bruker 
+#
+# Format 
+# Fornavn;Etternavn;OU;Passord;epost;
+#
+# Eksempel 
+# Loyd;Hebump;OU=Administrasjon,OU=GaMe,DC=grp14,DC=local;aannoo8899;loyheb@game.no;
+
+Function New-ADBrukerCSV 
 {
 
+    do {
+        # Dialogboks for å åpne CSV-fil 
+        $csvFil = New-Object System.Windows.Forms.OpenFileDialog
+        $csvFil.Filter = "csv files (*.csv)|*.csv|txt files (*.txt)|*.txt|All files (*.*)|*.*"
+        $csvFil.Title = "Åpne opp CSV fil som inneholder brukere"
+        $csvFil.ShowDialog()
+    }until ($csvFil.FileName -ne "")
+
+    # Importer brukere fra CSV
+    $brukere = Import-Csv $csvFil.FileName -Delimiter ";"
+    write-host 'csv importert'
+
+    # Gå igjennom alle brukere 
+    foreach ($bruker in $brukere) {
+
+        # Konvert passord over til sikker tekst 
+        $passord = ConvertTo-SecureString $bruker.Passord -AsPlainText -Force 
+        # Hent ut etternavn 
+        $etternavn = $bruker.Etternavn 
+        # Hent ut fornavn 
+        $fornavn = $bruker.Fornavn 
+        # Hent ut epost 
+        $epost = $bruker.Epost 
+        # Hent ut OU-sti 
+        $OU = $bruker.OU 
+
+        # Sett et unikt brukernavn 
+        [String]$brukernavn = Set-Brukernavn $fornavn $etternavn 
+        # Ta bort mellomrom ol. 
+        $brukernavn = $brukernavn.Trim() 
+        # Opprett fullt navn ut fra fornavn og etternavn 
+        $fulltNavn = $fornavn + " " + $etternavn
+        
+        # Opprett bruker 
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Try {
+                New-ADUser  -SamAccountName $using:brukernavn `
+                            -UserPrincipalName $using:brukernavn `
+                            -Name $using:fulltNavn `
+                            -Surname $using:etternavn `
+                            -AccountPassword $using:passord `
+                            -ChangePasswordAtLogon $using:true `
+                            -EmailAddress $using:epost `
+                            -Enabled $true
+                            #-Path $using:OU
+
+                Write-Host "Brukeren $using:brukernavn er opprettet" -ForegroundColor Green
+            }catch{
+                Write-Host $_.Exception.Message 
+            }
+        }
+    }
+    
+    # Sendes tilbake til meny 
+    return Get-ObjOpprettBrukere
+}
+
+Function Get-ObjOpprettBrukere
+{
+    [pscustomobject]@{'Nummer'=1; 'Alternativ'='Opprett bruker manuelt'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {New-ADBruker} -PassThru    
+    [pscustomobject]@{'Nummer'=2; 'Alternativ'='Opprett brukere fra CSV'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {New-ADBrukerCSV} -PassThru
+}
+
+
+Function Set-ADBruker
+{
+    param
+    (
+        [Switch]$Passord,
+        [Switch]$Aktiver,
+        [Switch]$Deaktiver,
+        [Switch]$EndreBrukerNavn
+    )
+
+    # Søk etter bruker
+
+}
+Function Get-ObjModifiserBrukere
+{
+    [pscustomobject]@{'Nummer'=1; 'Alternativ'='Endre passord for bruker'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Set-ADBruker -passord} -PassThru
+    [pscustomobject]@{'Nummer'=2; 'Alternativ'='Aktiver bruker'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Set-ADBruker -Aktiver} -PassThru
+    [pscustomobject]@{'Nummer'=3; 'Alternativ'='Deaktiver bruker'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Set-ADBruker -Deaktiver} -PassThru
+    [pscustomobject]@{'Nummer'=4; 'Alternativ'='Endre brukernavn'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Set-ADBruker -EndreBrukerNavn} -PassThru
+}
+Function Get-ObjBrukerKontoer
+{
+    [pscustomobject]@{'Nummer'=1; 'Alternativ'='Opprett brukere'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-ObjOpprettBrukere} -PassThru
+    [pscustomobject]@{'Nummer'=2; 'Alternativ'='Søk opp og modifiser brukere'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-ObjModifiserBrukere} -PassThru
+    [pscustomobject]@{'Nummer'=3; 'Alternativ'='List ut alle deaktiverte brukere'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Write-Deaktiverte} -PassThru
+    [pscustomobject]@{'Nummer'=4; 'Alternativ'='List ut alle aktive brukere'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Write-Aktiverte} -PassThru
+    [pscustomobject]@{'Nummer'=5; 'Alternativ'='List ut gruppemedlemskap for bruker'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-GruppeMedlemskap} -PassThru
+}
+Function Get-ObjActiveDirectory
+{
+    [pscustomobject]@{'Nummer'=1; 'Alternativ'='Brukerkontoer'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-ObjBrukerKontoer} -PassThru 
+    
+    [pscustomobject]@{'Nummer'=2; 'Alternativ'='Arbeidsstasjoner'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {''} -PassThru  
+
+    [pscustomobject]@{'Nummer'=3; 'Alternativ'='Grupper'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {''} -PassThru  
+
+    [pscustomobject]@{'Nummer'=4; 'Alternativ'='Konfigurer GPO'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {''} -PassThru     
+}
+Function Get-Meny
+{
     Get-ObjVirtuellRouter
     [pscustomobject]@{'Nummer'=2; 'Alternativ'='Pull Server'}
     [pscustomobject]@{'Nummer'=3; 'Alternativ'='Filtjener'}
-    [pscustomobject]@{'Nummer'=4; 'Alternativ'='Active Directory'}
+    [pscustomobject]@{'Nummer'=4; 'Alternativ'='Active Directory'} | 
+    Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {Get-ObjActiveDirectory} -PassThru
     [pscustomobject]@{'Nummer'=5; 'Alternativ'='Hyper-V'}
 }
 
