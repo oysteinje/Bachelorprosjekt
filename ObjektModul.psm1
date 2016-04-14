@@ -700,6 +700,44 @@ Function Get-ObjOpprettBrukere
     Add-Member -MemberType ScriptMethod -Name "Reaksjon" -Value {New-ADBrukerCSV} -PassThru
 }
 
+Function Write-ADBruker
+{
+    param
+    (
+        [Object[]]$Brukere
+    )
+    # List ut AD brukere
+ 
+    $Resultat = Set-LinjeNummer $Brukere
+
+    Write-Host ($Resultat | ft -autosize `
+                -Property Nummer, userPrincipalName, Enabled, Name, SamAccountName | `
+                out-string)
+
+    return $Resultat
+}
+
+Function Find-ADBruker
+{
+    # Less inndata 
+    [String]$SøkeTekst = Read-Host -Prompt 'Søk etter bruker. La stå tomt for å liste ut alle'
+
+
+    $Resultat = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        Get-ADUser -Filter {UserPrincipalName -like '*'}
+    }
+
+    $Resultat = $Resultat | where {$_.UserPrincipalName -match $SøkeTekst}
+
+    if($Resultat -notlike $null) 
+    {
+        return (Write-ADBruker $Resultat)
+    }else
+    {
+        Write-Host 'Ingen treff i søk'
+        return $null
+    }
+}
 
 Function Set-ADBruker
 {
@@ -712,7 +750,20 @@ Function Set-ADBruker
     )
 
     # Søk etter bruker
+    $Brukere = Find-ADBruker
+    
+    if($Passord -and $brukere -notlike $null)
+    {
+        $NyttPassord = Read-Host -Prompt 'Skriv inn nytt passord'
+        $NyttPassord = ConvertTo-SecureString -String $NyttPassord -AsPlainText -Force
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            $using:Brukere | Set-ADAccountPassword -Reset -NewPassword $using:NyttPassord
+        }
+        write-host 'Passord er endret' -ForegroundColor Green
+        sleep -Seconds 3
+    }
 
+    return Get-ObjModifiserBrukere
 }
 Function Get-ObjModifiserBrukere
 {
