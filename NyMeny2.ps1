@@ -103,13 +103,41 @@
             Nummer=5
             Alternativ='Søk opp og slett gruppe'
             Handling=[scriptblock]::Create('Set-ADGruppe -Slett')
+        },
+        [pscustomobject]@{
+            Nummer=6
+            Alternativ='Legg brukere til i gruppe'
+            Handling=[scriptblock]::Create('Add-BrukerTilGruppe')
         }
     },
     [pscustomobject]@{
         Nummer=4
         Alternativ='Konfigurer GPO'
-        Handling=[pscustomobject]@{
-           
+        Handling=
+        [pscustomobject]@{
+            Nummer=1
+            Alternativ='Opprett GPO'
+            Handling=[scriptblock]::Create('New-cGPO')
+        },
+        [pscustomobject]@{
+            Nummer=2
+            Alternativ='Legg gruppe til GPO'
+            Handling=[scriptblock]::Create('Add-GRuppeTilGPO')
+        },
+        [pscustomobject]@{
+            Nummer=3
+            Alternativ='Fjern gruppe fra GPO'
+            Handling=[scriptblock]::Create('Remove-GruppeFraGPO')
+        },
+        [pscustomobject]@{
+            Nummer=4
+            Alternativ='Sett brannmur GPO'
+            Handling=[scriptblock]::Create('Set-GPO -brannmur')
+        },
+        [pscustomobject]@{
+            Nummer=5
+            Alternativ='Slett GPO'
+            Handling=[scriptblock]::Create('Remove-GPO')
         }
     }
 },
@@ -188,17 +216,30 @@ function Add-StandardObjekt
 
 do
 {
-
+    # Løkken går så lenge avslutt er lik false 
     $avslutt = $false 
+
+    # Legger til 'tilbake' og 'avslutt' i meny
     $meny = Add-StandardObjekt $meny $tidligereValg
+
+    # Skriver ut meny 
     $meny | ft -AutoSize
+
+    # Legger menyen i variabel slik at den huskes til neste runde i løkken
     $tidligereValg = $meny
 
     do
     {
+        # Går så lenge valget ikke er gyldig
         $err = $false 
+
+        # Lar brukeren velge 
         $r = Read-Host '>'
+        
+        # Hent valg 
         $valg = $meny | where {$_.nummer -eq $r} 
+        
+        # Kjør løkke på nytt hvis valget ikke har gitt noen resultat 
         if($valg -eq $null)
         {
             $err = $true 
@@ -206,10 +247,12 @@ do
         }
     }while($err -eq $true)
     
+    # Forsøker å utføre kode 
     try
     {
         Invoke-Command -ScriptBlock $valg.handling | out-host
     }
+    # Hvis det ikke er kode, skal det være et menyobjekt 
     catch
     {
         write 'catch'

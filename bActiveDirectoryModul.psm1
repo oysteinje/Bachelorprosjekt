@@ -501,6 +501,10 @@ Function Write-ADGruppe
 }
 Function Find-ADGruppe
 {
+    param
+    (
+     [switch]$MaksEnBruker
+    )
     #Write-Host `
     $Hjelp = 
     'Søk etter grupper.
@@ -562,7 +566,7 @@ Function Find-ADGruppe
             [object[]]$ValgtGruppe += $resultat | where{$_.nummer -eq $SøkeTekst}      
         }
         # Tester om brukeren har foretatt flere valg
-        elseif($SøkeTekst.Contains(','))
+        elseif($SøkeTekst.Contains(',') -and !$MaksEnBruker)
         {
             $SøkeTekst = $SøkeTekst.Split(',') | %{$_.Trim()}            
             [object[]]$ValgtGruppe += $resultat | where{$_.nummer -in $SøkeTekst}            
@@ -669,8 +673,275 @@ Function Set-ADGruppe
     }
     elseif($Slett -and $Gruppe -notlike $null)
     {
+        # Gjennomgår hver valgt gruppe og sletter det
+        foreach($g in $Gruppe)
+        {
+            Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                Remove-ADGroup -Identity $using:g.objectguid
+            }
+            Write-Host "Gruppen" $g.name "er nå slettet"
+        }
+        sleep 3
+    }
+}
 
+Function Add-BrukerTilGruppe
+{
+    # Søk og velg EN gruppe 
+    Write-Host "Velg gruppe"
+    $Gruppe = Find-ADGruppe -MaksEnBruker 
+
+    # Søk og velg flere brukere
+    Write-Host "Velg en eller flere brukere"
+    $Brukere = Find-ADBruker
+
+    # Legg brukere til i gruppe
+    if($Brukere -ne $null -and $Gruppe -ne $null)
+    {       
+        foreach($Bruker in $Brukere)
+        {
+            Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                Add-ADGroupMember -Identity $using:gruppe.ObjectGUID -Members $using:Bruker.ObjectGUID
+            }
+            Write-Host $Bruker.userprincipalname er nå lagt til i gruppen $Gruppe.name           
+        }
+        sleep 2
     }
 }
 
 
+# Oppretter ny GPO
+Function New-cGPO
+{
+    # Skriv inn navn 
+    $Navn = Validate-NotNull -Prompt 'Navn for GPO'
+
+    # Skriv inn kommentar 
+    $Kommentar = Read-Host -Prompt 'Kommentar'
+
+    # Sjekk om GPO ikke allerede eksisterer 
+    $GPOs = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        (get-gpo -all).DisplayName
+    }
+
+    while(($GPOs | where{$_ -eq $Navn}) -ne $null)
+    {
+        $Navn = Read-Host -Prompt "Navnet $Navn finnes allerede. Prøv et annet"
+    }
+
+    # Utfør endring 
+    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        New-GPO -Name $using:Navn -Comment $using:kommentar
+    }
+
+    # Skriv ut melding 
+    Write-Host "GPO $Navn er opprettet"
+
+    # Sov to sekunder slik at brukeren rekker å se hva som skjer 
+    Sleep 2
+}
+
+Function Add-GRuppeTilGPO
+{
+    # Velg GPO 
+    $GPO = Get-cGPO 
+
+    # Velg Gruppe(r)
+    $Grupper = Find-ADGruppe
+
+    $PermissionLevel = Get-Valg -alternativer $('GpoRead', 'GpoApply', 'GpoEdit', 'GpoEditDeleteModifySecurity', 'None') `
+        -prompt 'PermissionLevel'
+            
+    
+    # Gjennomfør endring
+    foreach($Gruppe in $Grupper.Name)
+    {
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Set-GPPermissions -GUID $using:GPO.id -TargetName $using:gruppe `
+            -PermissionLevel $using:PermissionLevel -TargetType 'group'
+        }
+        Write-Host "Gruppen $Gruppe er lagt til i GPO" $GPO.name
+    } 
+
+    #GpoRead, GpoApply, GpoEdit, GpoEditDeleteModifySecurity or None.
+}
+
+Function Remove-GruppeFraGPO
+{
+
+}
+
+Function Remove-GPO
+{
+
+}
+
+Function Get-cGPO
+{
+    # Hent ut alle GPOs
+    $GPOs = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        get-gpo -all
+    }
+
+    # Sett på linjenummer 
+    $GPOs = Set-LinjeNummer $GPOs 
+    
+    # Skriv ut GPOs
+    Write-Host ($GPOs | ft -AutoSize -Property Nummer, DisplayName, Owner, GpoStatus, CreationTime | out-string)
+
+    do
+    {   
+        # La brukeren velge 
+        $Valg = Read-Host -Prompt "Skriv inn nummer for å velge GPO [f.eks. 1]"
+
+        # Hent ut valg 
+        $Valg = $GPOs | where {$_.nummer -eq $Valg}
+
+    }while($valg -eq $null)
+
+    # Klarere skjer 
+    Clear-Host 
+
+    # Skriv ut valg 
+    Write-Host "Du har valgt" $valg.DisplayName 
+
+    # Returner valg 
+    return $valg 
+}
+
+Function Set-GPO
+{
+    param
+    (
+        [switch]$Brannmur
+    )
+
+    $GPO = Get-cGPO
+    
+    # Utfør endring
+    if($brannmur -and $GPO -ne $null)
+    {
+        # Hent ut GPOnavn og domenenavn
+        $GPONavn = $GPO.DisplayName
+        $DomeneNavn = $GPO.DomainName
+
+
+        # Åpne gpo
+        $GPO = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Open-NetGPO -PolicyStore "$using:DomeneNavn\$using:GPONavn" 
+        }
+         
+        # Velg Port eller Program regel 
+        $RegelType = Get-Valg -alternativer $('Program', 'Port') -PromptTekst 'Spesifiser regeltype' 
+
+        # Velg standardinstillinger 
+        $DisplayName = Validate-NotNull -Prompt 'DisplayName'
+        $Name = Validate-NotNull -Prompt 'Name'
+        $Direction = Get-Valg -alternativer $('Inbound', 'Outbound') -PromptTekst 'Direction'
+        $Action = Get-Valg -alternativer $('Allow', 'Block') -PromptTekst 'Action'
+
+        switch($RegelType)
+        {
+            # Opprett programregel
+            'Program'
+            {
+                # Les inn sti til program 
+                $Program = Validate-NotNull -prompt 'Sti til program [f.eks C:\Program Files (x86)\Messenger\msmsgs.exe]'
+
+                # Opprett regel 
+                Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                    New-NetFirewallRule -DisplayName $using:displayname -name $using:name `
+                    -Direction $using:direction -Action $using:action -Program $using:program `
+                    -GPOSession $using:gpo 
+                }
+                break
+            }
+        
+            # Opprett portregel
+            'Port'
+            {
+                # Inndata for portregel 
+                $Protocol = Get-Valg -alternativer $('TCP', 'UDP') -PromptTekst 'Protocol' 
+                $LocalPort = Validate-Int -prompt 'LocalPort [f.eks. 22]'
+                $RemotePort = Validate-Int -prompt RemotePort [f.eks. 3389]
+
+                # Oppretter regel 
+                Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                    New-NetFirewallRule -DisplayName $using:displayname -name $using:name `
+                    -Direction $using:direction -Action $using:action -protocol $using:protocol `
+                    -LocalPort $using:LocalPort -RemotePort $using:RemotePort `
+                    -GPOSession $using:GPO
+                } 
+                break
+            }
+        }
+        
+        # Lagre GPO
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Save-NetGPO -GPOSession $using:gpo
+        }
+        
+        Write-Host 'Firewallregel opprettet'
+        sleep 3
+    }
+}
+
+# Validerer at input er et tall 
+Function Validate-Int {
+    param(
+        [switch]$NotNull,
+        [string]$prompt = '>'
+    )
+
+    # Les inndata
+    $Int = Read-Host -Prompt $prompt
+
+    # Sjekk at verdien er et gyldig tall
+    do
+    {
+        $error = $false 
+
+        # Hvis Null verdi er godtatt 
+        if($NotNull)
+        {
+            if($Int -notmatch '^\d+$')
+            {
+                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
+                $error = $true
+            }
+
+        }
+        else
+        {
+            
+            if($Int -notmatch '^\d+$' -and $Int.Length -ne 0)
+            {
+                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
+                $error = $true
+            }
+        }
+    } while ($error -eq $true)
+
+    if(!$NotNull -and $int.Length -eq 0)
+    {
+        $int = $null
+    }
+    return $Int
+}
+
+Function Validate-NotNull
+{
+    param
+    (      
+        [string]$Prompt
+    )
+
+    $Inndata = Read-Host -Prompt $Prompt
+
+    while($Inndata -eq $null)
+    {
+        $Inndata = Read-Host 'Kan ikke være null'
+    }
+    
+    return $Inndata
+}
