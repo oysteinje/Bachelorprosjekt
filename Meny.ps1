@@ -62,7 +62,7 @@ do
     $reaksjon = ($ValgtObjekt.Reaksjon()) #($ValgtObjekt | Select-Object -ExpandProperty reaksjon)
     #}
 
-    Clear-Host
+    #Clear-Host
 
 
 }while ($reaksjon -notmatch 'avslutt()')

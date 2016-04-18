@@ -294,7 +294,7 @@ Function Endre-Minne {
 # Validerer at input er et tall 
 Function Valider-Verdi {
     param(
-        [param(Mandatory)]
+        [parameter(Mandatory)]
         $Verdi
     )
 

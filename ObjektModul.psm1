@@ -9,6 +9,9 @@ Function Connect-Sesjoner
         $Credentials
     )
 
+    # Fjerner alle ødelagte sesjoner 
+    (Get-PSSession | where {$_.state -match 'Broken'}) | Remove-PSSession
+
     foreach($server in $servere)
     {
         # Henter sesjonen 
@@ -708,35 +711,78 @@ Function Write-ADBruker
     )
     # List ut AD brukere
  
-    $Resultat = Set-LinjeNummer $Brukere
+    #$Resultat = Set-LinjeNummer $Brukere
 
     Write-Host ($Resultat | ft -autosize `
                 -Property Nummer, userPrincipalName, Enabled, Name, SamAccountName | `
                 out-string)
 
-    return $Resultat
+    #return $Resultat
 }
 
 Function Find-ADBruker
 {
-    # Less inndata 
-    [String]$SøkeTekst = Read-Host -Prompt 'Søk etter bruker. La stå tomt for å liste ut alle'
 
+    $Hjelp = "Søk etter brukere. La stå tom for å liste ut alle.
+    `nKommando           Beskrivelse
+    `n!avbryt            Går tilbake til meny
+    `n!ferdig            Går videre
+    `n!velg              Bruk nummer for å velge brukere. [F.eks :velg 2,3,5]
+    `n!?                 Lister ut denne hjelpemenyen
+    "
 
-    $Resultat = Invoke-Command -Session $SesjonADServer -ScriptBlock {
-        Get-ADUser -Filter {UserPrincipalName -like '*'}
-    }
+    Write-Host $Hjelp  
 
-    $Resultat = $Resultat | where {$_.UserPrincipalName -match $SøkeTekst}
-
-    if($Resultat -notlike $null) 
+    do
     {
-        return (Write-ADBruker $Resultat)
-    }else
-    {
-        Write-Host 'Ingen treff i søk'
-        return $null
-    }
+        $Søk = $true 
+
+        # Les inndata 
+        [String]$SøkeTekst = Read-Host -Prompt ">"
+
+        if($SøkeTekst.Substring(0,5) -match '!velg')
+        {
+            # Velg brukere
+            #Get-Objekt $Resultat
+
+        }elseif($SøkeTekst.Substring(0,7) -match '!ferdig')
+        {
+            # Utfør endring 
+
+        }elseif($SøkeTekst.Substring(0,7) -match '!avbryt')
+        {
+            # Avbryt 
+            $Søk = $false
+            $Resultat = $null
+        }else
+        {
+            # Utfør søk
+            
+            $Resultat = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                Get-ADUser -Filter {UserPrincipalName -like '*'}
+            }
+            
+            # Finner alle brukere som matcher søkeord 
+            $Resultat = $Resultat | where {$_.UserPrincipalName -match $SøkeTekst}
+            
+            if($Resultat -notlike $null) 
+            {
+                # Legger til linjenummer 
+                #$Resultat = Set-LinjeNummer $Resultat
+
+                # Skriver ut brukere
+                #Write-ADBruker $Resultat
+                #write-host ($resultat | ft name | out-string)
+
+            }else
+            {
+                Write-Host 'Ingen treff i søk'
+            }
+        }
+        
+    }while($Søk -eq $true)
+
+   return $resultat
 }
 
 Function Set-ADBruker
@@ -751,7 +797,7 @@ Function Set-ADBruker
 
     # Søk etter bruker
     $Brukere = Find-ADBruker
-    
+
     if($Passord -and $brukere -notlike $null)
     {
         $NyttPassord = Read-Host -Prompt 'Skriv inn nytt passord'
