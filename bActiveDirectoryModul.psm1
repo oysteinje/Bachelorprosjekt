@@ -631,6 +631,7 @@ Function Set-ADGruppe
             # Gjennomfører endring
             Invoke-Command -Session $SesjonADServer -ScriptBlock {
                 Rename-ADObject -Identity $using:g.ObjectGUID -NewName $using:NyttNavn
+                Set-ADGroup -Identity $using:g.ObjectGUID -SamAccountName $using:NyttNavn
             }
 
             # Skriv ut endring til brukeren
@@ -703,10 +704,97 @@ Function Add-BrukerTilGruppe
             Invoke-Command -Session $SesjonADServer -ScriptBlock {
                 Add-ADGroupMember -Identity $using:gruppe.ObjectGUID -Members $using:Bruker.ObjectGUID
             }
-            Write-Host $Bruker.userprincipalname er nå lagt til i gruppen $Gruppe.name           
+            Write-Host "$($Bruker.userprincipalname) er nå lagt til i gruppen $($Gruppe.name)"         
         }
         sleep 2
     }
+}
+
+# Legg grupper til gruppe 
+Function Add-GruppeTilGruppe
+{
+    # Skriv ut melding 
+    Write-Host "Velg gruppe du vil legge til medlemmer i"
+
+    # Søk og velg én gruppe 
+    $Gruppe = Find-ADGruppe -MaksEnBruker 
+
+    # Skriv ut melding 
+    Write-Host "Velg grupper du vil legge til"
+
+    # Søk og velg flere grupper 
+    $GruppeMedlemmer = Find-ADGruppe
+
+    # Sjekk at variablene har verdier 
+    if($Gruppe -ne $null -and $GruppeMedlemmer -ne $null)
+    {
+        # Legg gruppene til i gruppe 
+        foreach($Medlem in $GruppeMedlemmer)
+        {
+            Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                Add-ADGroupMember -Identity $using:gruppe.ObjectGUID `
+                -Members $using:medlem.ObjectGUID
+            }
+
+            # Skriv ut melding 
+            Write-Host "$($Medlem.name) er lagt til i gruppen $($Gruppe.name)"
+        }
+
+        # Sov noen sekunder 
+        sleep 2
+    }
+}
+
+# Skriv ut medlemmer av gruppe 
+Function Write-ADGruppeMedlemmer
+{
+    param
+    (
+        [parameter(mandatory)]$Gruppe
+    )
+
+    # List ut medlemmer i hver gruppe 
+    foreach($g in $Gruppe)
+    {
+        # Skriv ut melding 
+        Write-Host "Medlemmer for gruppe $($g.name)"
+
+        # Hent medlemmer 
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            Get-ADGroupMember -Identity $using:g.ObjectGUID
+        }
+    }
+
+    # Lar brukeren trykke enter for å gå tilbake 
+    Read-Host 'Slutt. Trykk Enter for å fortsette'
+}
+
+# Velg én AD gruppe 
+Function Get-ADGruppe
+{
+    # Hent ut grupper
+    $Gruppe = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        Get-ADGroup -Filter *
+    }
+
+    # Skriv ut AD gruppe 
+    Write-ADGruppe -Gruppe $Gruppe
+
+    # Legg til linjenummer 
+    #$gruppe = Set-LinjeNummer $Gruppe | Out-Null
+
+    # Velg fra liste 
+    while ($ValgtGruppe -eq $null) 
+    {
+        # La brukeren velge 
+        $Valg = read-host "Velg en gruppe fra listen ved å skrive inn nummer [F.eks. 1]"
+        
+        # Hent ut valg 
+        $ValgtGruppe = $Gruppe | where {$_.nummer -eq $valg}
+    }
+    
+    # Skriv ut medlemmer 
+    Write-ADGruppeMedlemmer -Gruppe $ValgtGruppe 
 }
 
 
@@ -718,6 +806,7 @@ Function New-cGPO
 
     # Skriv inn kommentar 
     $Kommentar = Read-Host -Prompt 'Kommentar'
+    if($Kommentar.Length -eq 0) {$Kommentar = ' '}
 
     # Sjekk om GPO ikke allerede eksisterer 
     $GPOs = Invoke-Command -Session $SesjonADServer -ScriptBlock {
@@ -771,11 +860,6 @@ Function Remove-GruppeFraGPO
 
 }
 
-Function Remove-GPO
-{
-
-}
-
 Function Get-cGPO
 {
     # Hent ut alle GPOs
@@ -809,11 +893,45 @@ Function Get-cGPO
     return $valg 
 }
 
+Function Remove-cGPO
+{
+    # Velg GPO 
+    $GPO = Get-cGPO 
+
+    # Slett GPO
+    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        Remove-Gpo -Guid $using:GPO.ID
+    } 
+
+    # Skriv ut melding 
+    Write-Host "$($GPO.DisplayName) er slettet"
+
+    # Sov litt 
+    sleep 2
+}
+
+# List ut alle GPO
+Function Write-GPO 
+{
+    # Hent ut alle GPO
+    $GPO = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        Get-GPO -All
+    }
+
+    # Skriv ut alle GPO
+    Write-Host ($GPO | format-table -AutoSize `
+        -Property DisplayName, Owner, GpoStatus, CreationTime | out-string)
+
+    # Lar brukeren trykke enter for å gå videre
+    Read-Host "Ferdig! Tryk Enter for å fortsette"
+}
+
 Function Set-GPO
 {
     param
     (
-        [switch]$Brannmur
+        [switch]$Brannmur,
+        [switch]$Status
     )
 
     $GPO = Get-cGPO
@@ -883,6 +1001,32 @@ Function Set-GPO
         
         Write-Host 'Firewallregel opprettet'
         sleep 3
+    }
+
+    # Sjekk om status er valgt og at GPO valg ikke er tomt 
+    if($status -and $GPO -ne $null)
+    {
+        # Velg status 
+        $Valg = Get-Valg -alternativer `
+            $('All Settings Enabled', 'User settings disabled', 'Computer settings disabled', 'All settings disabled') `
+            -PromptTekst 'Velg ny status for GPO'
+                
+        # Fjern mellomrom osv. 
+        $Valg = $valg -replace '\s',''
+
+        # Gjennomgå hvert valgte GPO
+        foreach($G in $GPO)
+        {
+            $GNavn = $g.name 
+
+            # Sett ny status 
+            Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                (Get-GPO -GUID $using:G.ID).GPOStatus = $using:Valg                 
+            }
+            
+            # Skriv ut melding 
+            Write-Host "Status for $($G.name) er endret til $valg"
+        }
     }
 }
 
