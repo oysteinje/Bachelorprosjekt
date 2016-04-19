@@ -108,6 +108,16 @@
             Nummer=6
             Alternativ='Legg brukere til i gruppe'
             Handling=[scriptblock]::Create('Add-BrukerTilGruppe')
+        },
+        [pscustomobject]@{
+            Nummer=7
+            Alternativ='Legg gruppe til i gruppe'
+            Handling=[scriptblock]::Create('Add-GruppeTilGruppe')
+        },
+        [pscustomobject]@{
+            Nummer=8
+            Alternativ='List ut medlemmer av gruppe'
+            Handling=[scriptblock]::Create('Get-ADGruppe')
         }
     },
     [pscustomobject]@{
@@ -137,7 +147,17 @@
         [pscustomobject]@{
             Nummer=5
             Alternativ='Slett GPO'
-            Handling=[scriptblock]::Create('Remove-GPO')
+            Handling=[scriptblock]::Create('Remove-cGPO')
+        },
+        [pscustomobject]@{
+            Nummer=6
+            Alternativ='List ut alle GPO'
+            Handling=[scriptblock]::Create('Write-GPO')
+        },
+        [pscustomobject]@{
+            Nummer=7
+            Alternativ='Sett GPO status'
+            Handling=[scriptblock]::Create('Set-GPO -status')
         }
     }
 },
