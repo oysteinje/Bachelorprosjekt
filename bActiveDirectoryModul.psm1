@@ -980,8 +980,8 @@ Function Set-GPO
             {
                 # Inndata for portregel 
                 $Protocol = Get-Valg -alternativer $('TCP', 'UDP') -PromptTekst 'Protocol' 
-                $LocalPort = Validate-Int -prompt 'LocalPort [f.eks. 22]'
-                $RemotePort = Validate-Int -prompt RemotePort [f.eks. 3389]
+                $LocalPort = Read-Tall -Prompt 'LocalPort [f.eks. 22]' -NullAllowed
+                $RemotePort = Read-Tall -Prompt 'RemotePort [f.eks. 3389]' -NullAllowed
 
                 # Oppretter regel 
                 Invoke-Command -Session $SesjonADServer -ScriptBlock {
@@ -1030,48 +1030,6 @@ Function Set-GPO
     }
 }
 
-# Validerer at input er et tall 
-Function Validate-Int {
-    param(
-        [switch]$NotNull,
-        [string]$prompt = '>'
-    )
-
-    # Les inndata
-    $Int = Read-Host -Prompt $prompt
-
-    # Sjekk at verdien er et gyldig tall
-    do
-    {
-        $error = $false 
-
-        # Hvis Null verdi er godtatt 
-        if($NotNull)
-        {
-            if($Int -notmatch '^\d+$')
-            {
-                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
-                $error = $true
-            }
-
-        }
-        else
-        {
-            
-            if($Int -notmatch '^\d+$' -and $Int.Length -ne 0)
-            {
-                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
-                $error = $true
-            }
-        }
-    } while ($error -eq $true)
-
-    if(!$NotNull -and $int.Length -eq 0)
-    {
-        $int = $null
-    }
-    return $Int
-}
 
 Function Validate-NotNull
 {

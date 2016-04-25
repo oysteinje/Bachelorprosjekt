@@ -7,7 +7,22 @@
 [pscustomobject]@{
     Nummer=2
     Alternativ='Pull'
-    Handling='..'
+    Handling=
+    [pscustomobject]@{
+        Nummer=1
+        Alternativ='Sett opp Pull Server'
+        Handling=[scriptblock]::Create('New-PullServer')
+    },
+    [pscustomobject]@{
+        Nummer=2
+        Alternativ='Sett opp Pull Mode på klient'
+        Handling=[scriptblock]::Create('Set-PullMode')
+    },
+    [pscustomobject]@{
+        Nummer=3
+        Alternativ='Legg til DSC konfigurasjon for en server'
+        Handling=[scriptblock]::Create('')
+    }
 },
 [pscustomobject]@{
     Nummer=3
@@ -164,7 +179,27 @@
 [pscustomobject]@{
     Nummer=4
     Alternativ='Hyper-V'
-    Handling='..'
+    Handling=
+    [pscustomobject]@{
+        Nummer=1
+        Alternativ='Opprett ny virtuell maskin uten virtuell harddisk'
+        Handling=[scriptblock]::Create('New-VirtuellMaskin -NoVhd')
+    },
+    [pscustomobject]@{
+        Nummer=2
+        Alternativ='Opprett ny virtuell maskin med virtuell harddisk'
+        Handling=[scriptblock]::Create('New-VirtuellMaskin -NyVhd')
+    },
+    [pscustomobject]@{
+        Nummer=3
+        Alternativ='Opprett ny virtuell maskin fra template'
+        Handling=[scriptblock]::Create('New-VirtuellMaskin -Template')
+    },
+    [pscustomobject]@{
+        Nummer=4
+        Alternativ='Endre virtuelt minne'
+        Handling=[scriptblock]::Create('Set-VirtueltMinne')
+    }
 }
 
 
@@ -172,34 +207,41 @@
 $global:NavnHyperV = 'Hyper-V Server'
 $global:NavnVRouter = 'Virtuell Router'
 $global:NavnADServer = 'Active Directory Server'
+$global:NavnPullServer = 'Pull Server'
 
 # IP for servere 
 $global:IPHyperV = '158.38.56.146'
 $global:IPVRouter = '158.38.56.149'
 $global:IPADServer = '158.38.56.149'
+$global:IPPullServer = '158.38.56.147'
 
 # IP og port for servere 
 $global:HyperV = @{NAVN=$NavnHyperV;IP=$IPHyperV;PORT='13389';PREFIX='hv'}
 $global:vRouter = @{NAVN=$NavnVRouter;IP=$IPVRouter;PORT='13389';PREFIX='vr'}
 $global:ADServer = @{NAVN=$NavnADServer;IP=$IPADServer;PORT='33895';PREFIX='vr'}
+$global:PullServer = @{NAVN=$global:NavnPullServer;IP=$global:IPPullServer;PORT='13389';PREFIX='ps'}
 
 # Prefix for servere
 $global:PrefixHyperV = 'hv'
 $global:PrefixVRouter = 'vr'
 $global:PrefixADServer = 'ad'
+$global:PrefixPullServer = 'ps'
 
 # Initialiserer nødvendige moduler 
 Import-Module .\bActiveDirectoryModul.psm1 -force -WarningAction SilentlyContinue
 Import-Module .\bSesjonModul.psm1 -force -WarningAction SilentlyContinue
 Import-Module .\bObjektModul.psm1 -force -WarningAction SilentlyContinue
+Import-Module .\bDesiredStateConfiguration.psm1 -Force -WarningAction SilentlyContinue
+Import-Module .\bHyperVModul.psm1 -Force -WarningAction SilentlyContinue
 
 # Kobler til sesjonene 
-Connect-Sesjoner -Servere $HyperV, $vRouter, $ADServer -Credentials $cred
+Connect-Sesjoner -Servere $HyperV, $vRouter, $ADServer, $PullServer -Credentials $cred
 
 # Henter sesjoner inn i variabel
 $global:SesjonHyperV = Get-PSSession -name $NavnHyperV
 $global:SesjonVRouter = Get-PSSession -name $NavnVRouter
 $global:SesjonADServer = Get-PSSession -name $NavnADServer
+$global:sesjonPullServer = Get-PSSession -name $NavnPullServer
 
 $tidligereValg = $null 
 
@@ -207,7 +249,7 @@ function Add-StandardObjekt
 {
     param
     (
-        [parameter(mandatory)]$Objekt,
+        [parameter(mandatory)][pscustomobject[]]$Objekt,
         $tidvalg
     )
     
