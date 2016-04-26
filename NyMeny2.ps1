@@ -86,8 +86,31 @@
     [pscustomobject]@{
         Nummer=2
         Alternativ='Arbeidsstasjoner'
-        Handling=[pscustomobject]@{
-           
+        Handling=
+        [pscustomobject]@{
+            Nummer=1
+            Alternativ='List ut arbeidsstasjoner'
+            Handling=[scriptblock]::Create('Write-AdArbeidsstasjon -pause')
+        },
+        [pscustomobject]@{
+            Nummer=2
+            Alternativ='Aktiver arbeidsstasjon'
+            Handling=[scriptblock]::Create('Set-ArbeidsStasjon -Aktiver')         
+        },
+        [pscustomobject]@{
+            Nummer=3
+            Alternativ='Deaktiver arbeidsstasjon'
+            Handling=[scriptblock]::Create('Set-ArbeidsStasjon -Deaktiver')         
+        },
+        [pscustomobject]@{
+            Nummer=4
+            Alternativ='Ny arbeidsstasjon'
+            Handling=[scriptblock]::Create('New-ArbeidsStasjon')         
+        },
+        [pscustomobject]@{
+            Nummer=5
+            Alternativ='Slett arbeidsstasjon'
+            Handling=[scriptblock]::Create('Remove-ArbeidsStasjon')         
         }
     },
     [pscustomobject]@{
@@ -199,6 +222,31 @@
         Nummer=4
         Alternativ='Endre virtuelt minne'
         Handling=[scriptblock]::Create('Set-VirtueltMinne')
+    },
+    [pscustomobject]@{
+        Nummer=5
+        Alternativ='Opprett checkpoints'
+        Handling=[scriptblock]::Create('New-VmCheckPoint')
+    },
+    [pscustomobject]@{
+        Nummer=6
+        Alternativ='Slett checkpoints'
+        Handling=[scriptblock]::Create('Remove-VmCheckPoint')
+    }, # Slett snapshots eldre enn X dager? https://technet.microsoft.com/en-us/library/hh848601.aspx
+    [pscustomobject]@{
+        Nummer=7
+        Alternativ='Start virtuelle maskiner'
+        Handling=[scriptblock]::Create('Start-VirtuellMaskin')
+    },
+    [pscustomobject]@{
+        Nummer=8
+        Alternativ='Skru av virtuelle maskiner'
+        Handling=[scriptblock]::Create('Stopp-VirtuellMaskin')
+    },
+    [pscustomobject]@{
+        Nummer=9
+        Alternativ='Slett virtuell maskin'
+        Handling=[scriptblock]::Create('Remove-VirtuellMaskin')
     }
 }
 

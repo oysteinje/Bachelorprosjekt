@@ -155,61 +155,6 @@ Function Read-Tall
 
 }
 
-
-
-# Validerer at input er et tall 
-<#
-Function Validate-Int {
-    param(
-        [switch]$NotNull,
-        [string]$prompt = '>',
-        [int]$Default
-    )
-
-    
-    # Les inndata
-    $Int = Read-Host -Prompt $prompt
-
-   do
-   {
-        $err = $false 
-
-
-   }while($err -eq $true)
-
-    # Sjekk at verdien er et gyldig tall
-    do
-    {
-        $error = $false 
-
-        # Hvis Null verdi er godtatt 
-        if($NotNull)
-        {
-            if($Int -notmatch '^\d+$')
-            {
-                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
-                $error = $true
-            }
-
-        }
-        else
-        {
-            
-            if($Int -notmatch '^\d+$' -and $Int.Length -ne 0)
-            {
-                $Int = Read-Host "Tallet er ikke gyldig. Prøv på nytt" 
-                $error = $true
-            }
-        }
-    } while ($error -eq $true)
-
-    if(!$NotNull -and $int.Length -eq 0)
-    {
-        $int = $null
-    }
-    return $Int
-}
-#>
 function Set-LinjeNummer 
 {
     param (
@@ -335,27 +280,6 @@ function Get-IntInput($tabell) {
 
     }while($err -eq $true)
 
-    # Sjekk at valg har gyldig input 
-    <#do {
-
-        $err = $false 
-        $valg = $null 
-
-        # Gjør et valg 
-        try {
-            [int]$valg = Read-Host "Velg et alternativ [f.eks. 0]"
-        }catch{
-            Write-Host "Ugyldig input"
-            $err = $true 
-        }
-
-        # Fikser problem med tabeller hvor det kun er én verdi
-        if($tabell -ne $null -and $tabell -isnot [system.array]) {
-            $tabell.length = 1 
-        }
-
-    }while(($err -eq $true) -or ($valg -gt ($tabell.length-1)) -or ($valg.length -eq 0))
-    #>
     return $valg 
 }
 
@@ -388,7 +312,8 @@ Function Select-Alternativ
 Function Read-String
 {
     param(
-        [string]$Prompt = '>'
+        [string]$Prompt = '>',
+        [string]$Default
     )
 
     
@@ -398,9 +323,11 @@ Function Read-String
 
         [string]$InnData = Read-Host -Prompt $Prompt
 
-        if($InnData.Length -eq 0) {
+        if($InnData.Length -eq 0 -and $Default -eq $null) {
             $err = $true 
             Write-Host 'Inndata kan ikke være null'
+        }elseif($InnData.Length -eq 0 -and $Default -ne $null) {
+            $InnData = $Default
         }
     }while($err -eq $true)
 
@@ -437,8 +364,9 @@ Function Select-EgenDefinertObjekt
     Process
     {
         do{
-            $Valg = Read-Host $Prompt 
-            $ValgtObjekt = $Objekt | where {$_.$parameter -eq $Valg}
+            $Valg = (Read-Host $Prompt).split(“,”) | %{$_.trim()} 
+            
+            $ValgtObjekt = $Objekt | where {$_.$parameter -in $Valg}
         }while($ValgtObjekt -eq $null)        
     }
     End
@@ -462,7 +390,7 @@ Function Read-JaNei
     }while($svar -ne 'j' -and $svar -ne 'n')
 
     if($svar -eq 'j') {$svar = $true}
-    else {$svar -eq $false}
+    else {$svar = $false}
 
     return $svar 
 }

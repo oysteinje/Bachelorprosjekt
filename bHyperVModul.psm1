@@ -57,6 +57,9 @@ Function New-VirtuellMaskin
     # Velg svitsj 
     $VmSvitsj = Select-VmSvitsj -VmSvitsj (Get-VmSvitsj -sesjon $SesjonHyperV)
 
+    # Skriv ut ledig plass på stasjonene 
+
+
     # Velg sti 
     do{
         $Sti = Read-Host -Prompt 'Skriv sti der virtuell maskin skal lagres f.eks [C:\VM]'
@@ -191,8 +194,31 @@ Function Set-VirtueltMinne
         out-string)
 
 
-    $ValgtVM = Select-EgenDefinertObjekt -Objekt $vms -Parameter nummer -Prompt 'Velg vm ved å skrive inn nummer'
+    $ValgtVM = Select-EgenDefinertObjekt -Objekt $vms -Parameter 'nummer' `
+        -Prompt 'Velg vm ved å skrive inn nummer. Skill med komma for å velge flere'
     
+    # Hent ut vm objekt for alle maskiner 
+    $ValgtVmState = Invoke-Command -Session $SesjonHyperV -ScriptBlock {        
+        ($using:valgtvm).vmname | get-vm
+    }
+
+    # Hent ut alle maskiner som ikke er slått av 
+    $ValgtVmState = $ValgtVmState | where {$_.state -ne 'off'} 
+
+    # Gir mulighet til å skru av valgte vms som er påslått. Hvis ikke brukeren vil, avbrytes sekvensen.
+    if($ValgtVmState -ne $null) {
+         $SkruAv = Read-JaNei `
+           -prompt "Virtuell maskin $($valgtVmState.vmname) må slås av for å endre minne. Ønsker du å dette? [j/n]"
+         if($SkruAv) {
+          Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+            Stop-VM -Name $using:ValgtVmState.vmname
+          }  
+        }else{
+            return $null
+        }                 
+    }
+
+    # Aktiver/Deaktiver dynamisk minne 
     if($ValgtVM.DynamicMemoryEnabled -eq $false) {
         $DynamicMemoryEnabled = Read-JaNei -prompt "Dynamisk minne er ikke aktivert. Ønsker du å aktivere? [j/n]"
     }else {
@@ -228,4 +254,316 @@ Function Set-VirtueltMinne
             else {"Noe gikk galt med endringen av $vm"}
         }       
     } 
+}
+
+Function New-VmCheckPoint
+{
+    param(
+        [switch]$Ny
+    )
+
+
+    # Hent virtuelle maskiner 
+    $VMs = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        get-vm 
+    } 
+
+    # Legg til linjenummer 
+    $Vms = Set-LinjeNummer $vms 
+
+    # Skriv ut VMs 
+    Write-Host ($vms | ft `
+        -Property Nummer, Name, State, Uptime, Status, Version | out-string)
+    
+    # Velg vms 
+    $ValgtVM = Select-EgenDefinertObjekt -Objekt $vms -Parameter nummer `
+        -Prompt "Velg virtuell maskin. Skill med komma for å velge flere"
+
+    # Hent checkpoints for VM 
+    $CheckPoints = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        $using:ValgtVM.name | Get-VMCheckpoint
+    }
+
+    # Skriv ut checkpoints 
+    if($CheckPoints -eq $null) { Write-Host "Det eksisterer ingen checkpoints for valgte maskiner"}
+    else {
+    
+        Write-host ($CheckPoints | ft `
+            -Property VMName, Name, SnapshotType, CreationTime, ParentSnapshotName | `
+            out-string)
+    }
+
+
+    $Godta = Read-JaNei -prompt "Ønsker du å opprette checkpoint for $($ValgtVM.vmname)? [j/n]"
+    
+    if($Godta) {
+        $SnapshotName = @()
+        # Les inn snapshotnavn
+        Foreach($vm in $ValgtVM) {
+            $SnapshotName += Read-String -Prompt "SnapshotNavn for $($vm.vmname) [$($vm.vmname) - ($(Get-Date))]" `
+                -Default "$($vm.vmname) - ($(Get-Date))"
+        }
+        
+        # Opprett checkpoints
+        $i = 0 
+        foreach($vm in $ValgtVM) {
+      
+            $ThisSnapshotName = $SnapshotName[$i]
+      
+            Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+                Checkpoint-VM -name $using:vm.name -SnapshotName $using:ThisSnapshotName
+            }
+      
+            if($?){Write-Host "Checkpoint for $($vm.name) er opprettet"}
+            else{Write-Host "Noe gikk galt ved opprettelse av checkpoint for $($vm.name)"}
+      
+            $i++
+        }
+    }else{
+        return $null 
+    }
+
+}
+
+Function Remove-VmCheckPoint
+{
+    $CheckPoints = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        Get-Vm | Get-VMCheckpoint
+    }
+
+    $CheckPoints = Set-LinjeNummer $CheckPoints
+
+    Write-host ($CheckPoints | Format-Table `
+        -Property Nummer, VMName, Name, SnapshotType, CreationTime, ParentSnapshotName | `
+        Out-String)
+
+
+    $ValgtCheckPoint = Select-EgenDefinertObjekt -Objekt $CheckPoints -Parameter nummer `
+        -Prompt 'Skriv inn nummer for å velge CheckPoint. Skill med komma for å velge flere'
+
+    Write-Host "Du har valgt $($ValgtCheckPoint.name)"
+
+    $Godta = Read-JaNei -prompt "Ønsker du å slette disse? [j/n]"
+
+    if($Godta) {
+        foreach($checkpoint in $ValgtCheckPoint) {
+            Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+                get-vmsnapshot -id $using:checkpoint.id | Remove-VMSnapshot           
+            }
+            if($?){Write-Host "Checkpoint $($checkpoint.name) er slettet"}
+            else{Write-Host "Noe gikk galt ved slettingen av $($checkpoint.name)"}
+        }
+    }else{
+        return $null
+    }
+}
+
+Function Start-VirtuellMaskin
+{
+    $VMs = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        get-vm | where {$_.state -eq 'Off'}
+    }
+
+    $VMs = Set-LinjeNummer $VMs 
+
+    Write-Host ($VMs | format-table `
+        -Property Nummer, Name, State, CPUUsage, Uptime, Status, Version | `
+        out-string)
+
+    $ValgtVM = Select-EgenDefinertObjekt -Objekt $VMs -Parameter nummer `
+        -Prompt "Velg virtuelle maskiner du ønsker å starte ved å skrive nummer. Skill med komma for å velge flere"
+
+    Write-Host "Du har valgt $($ValgtVM.name)"
+    
+    $Godta = Read-JaNei -prompt "Ønker du å starte disse? [j/n]"
+    
+    if($Godta) {
+        Write-Host "Starter virtuelle maskiner" -ForegroundColor Cyan
+        Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+            start-vm $using:ValgtVM.name
+        }
+    }
+}
+
+Function Stopp-VirtuellMaskin
+{
+    $VMs = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        get-vm | where {$_.state -eq 'Running'}
+    }
+
+    $VMs = Set-LinjeNummer $VMs 
+
+    Write-Host ($VMs | format-table `
+        -Property Nummer, Name, State, CPUUsage, Uptime, Status, Version | `
+        out-string)
+
+    $ValgtVM = Select-EgenDefinertObjekt -Objekt $VMs -Parameter nummer `
+        -Prompt "Velg virtuelle maskiner du ønsker å stoppe ved å skrive nummer. Skill med komma for å velge flere"
+
+    Write-Host "Du har valgt $($ValgtVM.name)"
+    
+    $Godta = Read-JaNei -prompt "Ønker du å stoppe disse? [j/n]"
+    
+    if($Godta) {
+        Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+            stop-vm $using:ValgtVM.name
+        }
+    }
+}
+
+Function Remove-VirtuellMaskin
+{
+    $VMs = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+        get-vm 
+    }
+
+    $VMs = Set-LinjeNummer $VMs 
+
+    Write-Host ($VMs | format-table `
+        -Property Nummer, Name, State, CPUUsage, Uptime, Status, Version | `
+        out-string)
+
+    $ValgtVM = Select-EgenDefinertObjekt -Objekt $VMs -Parameter nummer `
+        -Prompt "Velg virtuelle maskiner du ønsker å slette ved å skrive nummer. Skill med komma for å velge flere"
+
+    Write-Host "Du har valgt $($ValgtVM.name)"
+    
+    $Godta = Read-JaNei -prompt "Ønker du å slette disse? [j/n]"
+    
+    if($Godta) {
+        Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+            remove-vm -name $using:valgtvm.name
+        }
+    }    
+}
+
+Function Write-AdArbeidsstasjon 
+{
+    param(
+        $ArbeidsStasjoner,
+        [switch]$pause
+    )
+
+    if($ArbeidsStasjoner -eq $null) {
+        $ArbeidsStasjoner = Get-AdArbeidsstasjon 
+    }
+    
+    Write-Host ($ArbeidsStasjoner | format-table `
+         -Property name, enabled, dnshostname, ObjectGUID, SamAccountName, DistinguishedName | 
+         ` Out-String)
+
+    if($pause){pause}           
+}
+
+
+Function Get-AdArbeidsstasjon
+{
+    $ArbeidsStasjoner = invoke-command -Session $SesjonADServer -ScriptBlock {
+        Get-Adcomputer -filter *
+    }
+
+    return $ArbeidsStasjoner 
+}
+
+Function Set-ArbeidsStasjon
+{
+    param(
+        [switch]$Aktiver,
+        [switch]$Deaktiver
+    )
+
+    # Hent ut arbeidsstasjoner 
+    
+
+    if($Aktiver) {
+        $ArbeidsStasjoner = (Get-AdArbeidsstasjon | where {$_.enabled -eq $false})
+        Write-AdArbeidsstasjon -ArbeidsStasjoner $ArbeidsStasjoner
+        if($ArbeidsStasjoner -ne $null) {
+            $ArbeidsStasjoner = Set-LinjeNummer $ArbeidsStasjoner
+            $ValgtAS = Select-EgenDefinertObjekt -Objekt $ArbeidsStasjoner `
+                -Parameter nummer `
+                -Prompt "Velg arbeidsstasjoner du ønsker å aktivere ved å skrive inn nummer. Skill med komma for å velge flere"
+            $Godkjent = Read-JaNei -prompt "Ønsker du å aktivere $($ValgtASs.name)? [j/n]" 
+            if($Godkjent) {
+                foreach($as in $ValgtAS) {
+                    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                        Set-ADComputer -Identity $as.ObjectGUID -Enabled $true 
+                    }
+                }
+            }                   
+        }else{
+            Write-Host 'Det finnes ingen deaktiverte arbeidsstasjoner'
+        }
+    }
+    if($Deaktiver) {
+         $ArbeidsStasjoner = (Get-AdArbeidsstasjon | where {$_.enabled -eq $true})
+         Write-AdArbeidsstasjon -ArbeidsStasjoner $ArbeidsStasjoner
+
+         if($ArbeidsStasjoner -ne $null) {
+            $ArbeidsStasjoner = Set-LinjeNummer $ArbeidsStasjoner
+            $valgtAS = Select-EgenDefinertObjekt -Objekt $ArbeidsStasjoner `
+                -Parameter nummer `
+                -Prompt 'Velg arbeidsstasjoner du ønsker å deaktivere ved å skrive nummer. Skill med komma for å velge flere'
+           $Godkjent = Read-JaNei -prompt "Ønsker du å deaktivere $($valgtAS.name)? [j/n]"
+           if($Godkjent) {
+                foreach($as in $ArbeidsStasjoner){
+                    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                        Set-ADComputer -Identity $as.objectguid -enabled $false
+                    }
+                }
+           }
+         }else{
+            Write-Host 'Det finnes ingen aktiverte arbeidsstasjoner'
+         }
+    }
+}
+
+Function New-ArbeidsStasjon
+{
+    do {
+        
+        $err = $false
+
+        $AdComputerNavn = Read-String -Prompt 'Skriv inn navn på AD arbeidsstasjon. Skill med komma for å opprette flere'
+
+        $TestNavn = Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            $adcomp = $using:AdComputerNavn
+            get-adcomputer -filter {name -eq $adcomp}
+        }
+
+        if($TestNavn -ne $null) {
+            Write-Host "Det finnes allerede en arbeidsstasjon med navnet $AdComputerNavn"
+            $err = $true 
+        }
+    }while($err -eq $true)
+    
+    # Opprett adstasjon 
+    Invoke-Command -Session $SesjonADServer -ScriptBlock {
+        new-adcomputer -name $using:AdComputerNavn
+    }
+    
+    if($?) {"Arbeidsstasjonen $AdComputerNavn er opprettet"}
+    else {"Noe gikk galt med opprettelsen av $AdComputerNavn"}
+}
+
+Function Remove-ArbeidsStasjon
+{
+    $ArbeidsStasjoner = Get-AdArbeidsstasjon 
+    $ArbeidsStasjoner = Set-LinjeNummer $ArbeidsStasjoner 
+   
+    Write-Host ($ArbeidsStasjoner | format-table `
+         -Property nummer, name, enabled, dnshostname, ObjectGUID, SamAccountName, DistinguishedName | 
+         ` Out-String)
+        
+    $ValgtAdAs = Select-EgenDefinertObjekt -Objekt $ArbeidsStasjoner -Parameter nummer `
+        -Prompt "Velg arbeidsstasjon ved å skrive nummer. Skill med komma for å velge flere"
+    
+    $Godta = Read-JaNei -prompt "Ønsker du å slette arbeidsstasjon $($ValgtAdAs.name)? [j/n]"
+    if($Godta) {
+        foreach($as in $ValgtAdAs) {
+            Invoke-Command -Session $SesjonADServer -ScriptBlock {
+                Remove-ADComputer -Identity $using:as.ObjectGUID
+            }
+        }
+    }
 }
