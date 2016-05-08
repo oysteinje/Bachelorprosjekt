@@ -84,7 +84,7 @@ Function New-ADBruker
 {   
    
     # Skriv inn fornavn 
-    $fornavn = Read-Host "Skrv inn brukerens fornavn" 
+    $fornavn = Read-Host "Skriv inn brukerens fornavn" 
         
     # Skriv inn etternavn 
     $etternavn = Read-Host "Skriv inn brukerens etternavn" 
@@ -1046,4 +1046,67 @@ Function Validate-NotNull
     }
     
     return $Inndata
+}
+
+# Henter ut alle grupper en bruker er medlem av 
+Function Get-AdBrukerGruppe
+{
+    
+    Write-Host "Henter brukere. . ." -ForegroundColor Cyan 
+     
+    $Brukere = Invoke-Command -Session $sesjonadserver -script {
+        Get-ADUser -filter *
+    }
+
+    # Skriv ut brukere 
+    write $brukere 
+
+    do
+    {
+        # Velg bruker 
+        $inndata = Read-Host -Prompt "Velg en bruker ved å skrive samaccountname"
+
+        # Valider valg 
+        $valg = $brukere | where {$_.samaccountname -eq $inndata}
+    }until($valg -ne $null)
+
+    # Hent brukerens grupper 
+    $gruppe = Invoke-Command -Session $sesjonadserver -script {
+        Get-ADPrincipalGroupMembership `
+        -identity $using:valg.samaccountname
+    }
+
+    # Rensk skjerm
+    clear-host 
+
+    # List ut grupper 
+    write $gruppe 
+
+    # Trykk en tast for å gå tilbake
+    pause 
+}
+
+# Lister ut utløpsdato 
+Function Get-PassordUtlopsDato
+{
+
+ $brukere = Invoke-Command -Session $sesjonadserver `
+    -script {
+        $PwMaxDager = 
+        (Get-ADDefaultDomainPasswordPolicy).MaxPasswordAge.Days
+        
+        Get-ADUser -filter `
+        {Enabled -eq $True -and 
+        PasswordNeverExpires -eq $false}`
+        –Properties * |
+        Select-Object -Property "samaccountname", 
+        @{name="Utløpsdato"
+        ;Expression={$_.PasswordLastSet.AddDays($PwMaxDager)}}|
+        where {$_.Utløpsdato -ne $null}
+    }
+
+    
+    write-host ($brukere | select -prop samaccountname, Utløpsdato | out-string)
+
+    pause
 }

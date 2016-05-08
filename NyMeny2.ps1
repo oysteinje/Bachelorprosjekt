@@ -81,6 +81,16 @@
             Nummer=4
             Alternativ='List ut alle aktive brukere'
             Handling=[scriptblock]::Create('Write-ADAktivBruker')
+        },
+        [pscustomobject]@{
+            Nummer=5
+            Alternativ='List ut grupper for bruker'
+            Handling=[scriptblock]::Create('Get-AdBrukerGruppe')
+        },
+        [pscustomobject]@{
+            Nummer=6
+            Alternativ='List ut utløpsdato for passord'
+            Handling=[scriptblock]::Create('Get-PassordUtlopsDato')
         }
     },
     [pscustomobject]@{

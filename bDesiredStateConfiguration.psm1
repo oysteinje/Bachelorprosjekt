@@ -96,10 +96,12 @@ Function New-PullServer
         Get-DscConfiguration | where {$_.ResourceId -eq '[xDSCWebService]PSDSCPullServer'}
     }
 
-    #if ($Sjekk -ne $null) 
-    #{
-        #return "Serveren med IP $IPAdresse er allerede satt opp som pull server"
-    #}
+    if ($Sjekk -ne $null) 
+    {
+        write-host "Serveren med IP $IPAdresse er allerede satt opp som pull server"
+        pause
+        return $null
+    }
     
 
     ###############################

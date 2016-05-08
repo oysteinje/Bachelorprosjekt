@@ -448,9 +448,8 @@ Function Write-AdArbeidsstasjon
         $ArbeidsStasjoner = Get-AdArbeidsstasjon 
     }
     
-    Write-Host ($ArbeidsStasjoner | format-table `
-         -Property name, enabled, dnshostname, ObjectGUID, SamAccountName, DistinguishedName | 
-         ` Out-String)
+    Write-output $ArbeidsStasjoner | format-table `
+         -Property name, enabled, dnshostname, ObjectGUID, SamAccountName, DistinguishedName
 
     if($pause){pause}           
 }
@@ -520,6 +519,77 @@ Function Set-ArbeidsStasjon
 
 Function New-ArbeidsStasjon
 {
+    # Les inn passord 
+    $pw = read-host "Skriv inn ønsket passord. Kan stå tomt" 
+
+    # Konverter passord 
+    if($pw -ne "") {
+        $pw = ConvertTo-SecureString -String $pw -AsPlainText -Force
+    }else{
+        $pw = $null
+    }
+    
+    # Eksisterende as 
+    $as = Invoke-Command -Session $SesjonADServer -script {
+        get-adcomputer -filter * 
+    }
+
+
+    $AdComputerNavn = Read-Host `
+     -Prompt 'Skriv inn navn på AD arbeidsstasjon. 
+     Skill med komma for å opprette flere. 
+     Skriv x! for å avbryte.
+     navn'
+
+    # tilbake 
+    if($AdComputerNavn -eq 'x!') {
+        return $null
+    }
+
+    # Splitt hvis komma 
+    $adcomputernavn = $AdComputerNavn | % {$_.split(',')} 
+
+    # Fjern whitespace ved start og slutt
+    $adcomputernavn  = $adcomputernavn | % {$_.trim()}
+
+    # Sjekker om as navnet er ledig 
+    for($i=0; $i -le $AdComputerNavn.length; $i++)
+    {
+        while ($as.name -contains $AdComputerNavn[$i])
+        {
+            $navn = Read-Host `
+             -Prompt "Navnet $($AdComputerNavn[$i]) finnes alerede. 
+             Velg et annet"
+
+            $AdComputerNavn[$i] = $navn
+        }  
+    }
+
+    # Fjern evt. doble forekomster
+    $AdComputerNavn = $AdComputerNavn | select -Unique
+    
+    # Returnerer hvis det ikke er skrevet noen navn
+    if($AdComputerNavn -eq "") {
+        return $null
+    }
+
+    # Opprett adstasjon 
+    foreach ($navn in $AdComputerNavn) {
+        Invoke-Command -Session $SesjonADServer -ScriptBlock {
+            new-adcomputer -name $using:navn `
+                           -AccountPassword $using:pw `
+                           -Enabled $true `
+                           -SamAccountName $($using:navn).replace(" ", "") `
+                           -UserPrincipalName $($using:navn).replace(" ", "")
+
+        }
+    }
+
+    if($?) {"Arbeidsstasjonen $AdComputerNavn er opprettet"}
+    else {"Noe gikk galt med opprettelsen av $AdComputerNavn"}
+
+
+    <#
     do {
         
         $err = $false
@@ -544,6 +614,7 @@ Function New-ArbeidsStasjon
     
     if($?) {"Arbeidsstasjonen $AdComputerNavn er opprettet"}
     else {"Noe gikk galt med opprettelsen av $AdComputerNavn"}
+    #>
 }
 
 Function Remove-ArbeidsStasjon
