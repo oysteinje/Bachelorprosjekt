@@ -367,6 +367,8 @@ Function New-VirtuellMaskin2
                        -NewVHDPath "$using:VhdSti$using:vm.VHDX" `
                        -NewVHDSizeBytes $using:VhdStørrelse 
             } 
+
+            # Skriver ut melding 
             if($?) {Write-Host "VM med navnet $vm er opprettet"}
             else{Write-Host "Noe gikk galt, $vm er ikke opprettet"}
         }
@@ -376,10 +378,20 @@ Function New-VirtuellMaskin2
     }
     if($NoVhd)
     {
-        #new-vm -name -MemoryStartupBytes -Generation 1 -SwitchName -NoVHD
+        # Oppretter vm 
+        foreach ($vm in $VmNavn) {
+            Invoke-Command -Session $SesjonHyperV -ScriptBlock {
+                new-vm -name $using:vm -MemoryStartupBytes $using:OppstartsMinne `
+                -SwitchName $using:VmSvitsj -Path $using:sti -Generation $using:Generasjon -NoVHD 
+            }
+
+            # Skriver ut melding 
+            if($?) {Write-Host "VM med navnet $vm er opprettet"}
+            else{Write-Host "Noe gikk galt, $vm er ikke opprettet"}
+        }
     }
     if($Template)
     {
-        #new-vm -name -MemoryStartupBytes -Generation 1 -SwitchName -VHDPath
+       
     }  
 }

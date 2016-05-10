@@ -180,23 +180,28 @@ Function Write-VmDetaljert {
 
 Function Set-VirtueltMinne 
 {
-    
+    # Hent alle VM 
     $VMs = Invoke-Command -Session $SesjonHyperV -ScriptBlock {
         get-vm | Get-VMMemory 
     } 
 
+    # Legger på linjenummer 
     $Vms = Set-LinjeNummer $VMs
 
+    # Skriv ut alle VM 
     Write-host ($vms | ft -autosize -prop nummer, vmname, DynamicMemoryEnabled, `
         @{Label='Minimum';Expression={Format-size($_.minimum)}}, 
         @{Label='Startup';Expression={Format-size($_.Startup)}},
         @{Label='Maximum';Expression={Format-size($_.Maximum)}} | 
         out-string)
 
-
+    # Bruker velger VM 
     $ValgtVM = Select-EgenDefinertObjekt -Objekt $vms -Parameter 'nummer' `
         -Prompt 'Velg vm ved å skrive inn nummer. Skill med komma for å velge flere'
     
+    # Returner hvis avslutt 
+    if($ValgtVM -eq "x!") {return $null} 
+
     # Hent ut vm objekt for alle maskiner 
     $ValgtVmState = Invoke-Command -Session $SesjonHyperV -ScriptBlock {        
         ($using:valgtvm).vmname | get-vm

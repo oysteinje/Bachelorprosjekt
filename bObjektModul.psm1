@@ -366,6 +366,8 @@ Function Select-EgenDefinertObjekt
         do{
             $Valg = (Read-Host $Prompt).split(“,”) | %{$_.trim()} 
             
+            if($valg -eq "x!") {return $valg}
+
             $ValgtObjekt = $Objekt | where {$_.$parameter -in $Valg}
         }while($ValgtObjekt -eq $null)        
     }
