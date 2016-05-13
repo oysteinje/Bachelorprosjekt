@@ -419,7 +419,7 @@ Function New-VirtuellMaskin
 
 
     # Hent inn eksisterende vm 
-    $vms = Get-VirtuelleMaskiner 
+    $vms = Get-VirtuellMaskin
 
     # Les inn ønskede navn 
     do {
@@ -794,8 +794,9 @@ Function New-VmTemplate
         $vhdExt = 'vhdx'
     }
 
-    # Sett gen
-    if($vhdExt -eq 'vhd') {
+    # Sett generasjon til 1 hvis vhd
+    if($vhdExt -eq 'vhd' -and $generasjon -ne 1) {
+        Write-Verbose "Setter generasjon til 1"
         $generasjon = 1
     }
 
@@ -844,7 +845,7 @@ Function New-VmTemplate
                 -SwitchName $VmSvitsj"
         }  
     }
-    # Alle paremtre har verdi 
+    # Alle parametre har verdi 
     else {
         foreach($navn in $VmNavn) {
             # kmmando for ny vhd 
